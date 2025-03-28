@@ -4,6 +4,7 @@ from std_msgs.msg import Int32
 from geometry_msgs.msg import Pose
 from std_msgs.msg import Float32MultiArray
 from sensor_msgs.msg import Image
+from std_msgs.msg import UInt8
 from cv_bridge import CvBridge
 import numpy as np
 import apriltag
@@ -17,8 +18,7 @@ class AprilTagPublisherNode(Node):
 		self.tag_detected = False
 
 		# Publisher 설정
-		self.id_subscription = self.create_subscription(
-				Int32, '/id_value', self.id_value_callback, 10)
+		self.parking_signal_subscription = self.create_subscription(UInt8, '/nav_done', self.parking_signal_callback, 10)
 		# self.pose_publisher = self.create_publisher(Pose, '/april_tag_pose', 10)
 		self.dir_publisher = self.create_publisher(
 				Float32MultiArray, '/goal_moving', 10)
@@ -36,10 +36,10 @@ class AprilTagPublisherNode(Node):
 		self.detector = apriltag.Detector()
 		
 		# 카메라 메트릭스 및 왜곡 계수 로드
-		self.matrix_coefficients = np.load('/home/cowin-ys/work_space/cowin_bot_ws/src/vision/vision/calibration_value/camera_matrix.npy')
-		self.distortion_coefficients = np.load('/home/cowin-ys/work_space/cowin_bot_ws/src/vision/vision/calibration_value/dist_coefficients.npy')
-		# self.matrix_coefficients = np.load('/home/cowin/cowin_ws/src/april_parking/april_parking/calibration_value/camera_matrix.npy')
-		# self.distortion_coefficients = np.load('/home/cowin/cowin_ws/src/april_parking/april_parking/calibration_value/dist_coefficients.npy')
+		#self.matrix_coefficients = np.load('/home/cowin-ys/work_space/cowin_bot_ws/src/vision/vision/calibration_value/camera_matrix.npy')
+		#self.distortion_coefficients = np.load('/home/cowin-ys/work_space/cowin_bot_ws/src/vision/vision/calibration_value/dist_coefficients.npy')
+		self.matrix_coefficients = np.load('/home/cowin/cowin_ws/src/april_parking/april_parking/calibration_value1080_720/camera_matrix.npy')
+		self.distortion_coefficients = np.load('/home/cowin/cowin_ws/src/april_parking/april_parking/calibration_value1080_720/dist_coefficients.npy')
 
 		# Tag 크기
 		tag_size = 0.031  # Tag size in meters
@@ -61,7 +61,7 @@ class AprilTagPublisherNode(Node):
 		self.pub_switch = True
 
 		self.offset = 0.031
-		self.parking_signal = 3
+		self.parking_signal = 2
 		
 		self.translation_vectors=[]
 		self.rotation_vectors=[]
@@ -69,7 +69,10 @@ class AprilTagPublisherNode(Node):
 		self.get_logger().info("find_path_final.py released!")
 		
 		
-			
+	def parking_signal_callback(self, msg):
+		# 수신된 ID 저장
+		self.parking_signal = msg.data
+	
 
 	def id_value_callback(self, msg):
 		# 수신된 ID 저장
@@ -79,10 +82,12 @@ class AprilTagPublisherNode(Node):
 
 	def image_callback(self, msg):
 		try:
+			
+			print("0")
 			# ROS 이미지 메시지를 OpenCV 형식으로 변환
 			frame = self.bridge.imgmsg_to_cv2(msg, 'mono8')
 			#resize
-			#frame = cv2.resize(frame,(1080,720))
+			frame = cv2.resize(frame,(1080,720))
 			
 			if self.tag_detected:
 				return
@@ -92,6 +97,7 @@ class AprilTagPublisherNode(Node):
 
 			for detection in detections:
 				if detection.tag_id== self.parking_signal :
+					print("1")
 					#self.tag_detected = True
 					#detection = detections[0]
 					corners = detection.corners.astype(int)
@@ -104,21 +110,22 @@ class AprilTagPublisherNode(Node):
 					success, rotation_vector, translation_vector = cv2.solvePnP(
 							self.tag_3d_points, image_points, self.matrix_coefficients, self.distortion_coefficients)
 					slope = abs(math.tan(rotation_vector[1])) # 기울기
-					
+					print("2")
 					if success:
 						self.translation_vectors.append(translation_vector)
 						self.rotation_vectors.append(rotation_vector)
-						
+						print("3")
 						if len(self.translation_vectors) >= 5:
 							# 메시지 발행
-							os.system('cls' if os.name == 'nt' else 'clear')
+							print("4")
+							#os.system('cls' if os.name == 'nt' else 'clear')
 							median_translation_vectors = np.median(self.translation_vectors, axis=0)
 							median_rotation_vectors = np.median(self.rotation_vectors,axis=0)
 							
 							x=median_translation_vectors[0]
 							z=median_translation_vectors[2]
 							ry=median_rotation_vectors[1]
-							
+							print("5")
 							print(math.degrees(ry))
 							pose_msg = Float32MultiArray()
 							pose_msg.data = [0.0] * 4
@@ -132,7 +139,7 @@ class AprilTagPublisherNode(Node):
 									print("case 2")
 									moving_distance = self.offset - x - (z * slope)
 									pose_msg.data[0] = float(math.radians(90.0))
-									pose_msg.data[2] = float(math.radians(-90.0) + abs(rotation_vector[1]))
+									pose_msg.data[2] = float(math.radians(-90.0) + abs(ry))
 								
 							else:
 								if (x-z*slope) > self.offset :
@@ -145,9 +152,10 @@ class AprilTagPublisherNode(Node):
 									moving_distance = self.offset - x + (z * slope)
 									pose_msg.data[0] = float(math.radians(90.0))
 									pose_msg.data[2] = float(-math.radians(90.0) - abs(ry))
+							print("6")
 							pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
 							pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.05)
-					
+					print("7")
 					
 					#pose_msg.data[3] = float(translation_vector[2] * math.sqrt(1 +(slope ** 2))+self.delta_z)
 					for i in range(4):
