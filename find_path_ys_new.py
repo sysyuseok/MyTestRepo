@@ -126,36 +126,36 @@ class AprilTagPublisherNode(Node):
 								if (x+z*slope) > self.offset:
 									print("case 1")
 									new_x = float(((slope**2)*self.offset + x + z*slope)/(slope**2+1))
-                  new_z = float(slope*((x+z*slope-self.offset)/(slope**2+1)))
+									new_z = float(slope*((x+z*slope-self.offset)/(slope**2+1)))
 									pose_msg.data[0] = float(abs(ry))
-                  pose_msg.data[1]= float(math.sqrt((new_x-self.offset)**2+new_z**2))
+									pose_msg.data[1]= float(math.sqrt((new_x-self.offset)**2+new_z**2))
 									pose_msg.data[2] = float(math.radians(90.0))
-                  pose_msg.data[3]=float((z-new_z)*math.sqrt(1+slope**2)-0.15)
+									pose_msg.data[3]=float((z-new_z)*math.sqrt(1+slope**2)-0.15)
 								else:
 									print("case 2")
 									moving_distance = self.offset - x - (z * slope)
 									pose_msg.data[0] = float(math.radians(90.0))
-                  pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
+									pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
 									pose_msg.data[2] = float(math.radians(-90.0) + abs(rotation_vector[1]))
-                  pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.15)
+									pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.15)
 								
 							else:
 								if (x-z*slope) > self.offset :
 									print("case 3")
 									moving_distance = x - self.offset - (z * slope)
 									pose_msg.data[0] = float(math.radians(-90.0))
-                  pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
+									pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
 									pose_msg.data[2] = float(math.radians(90.0) - abs(ry))
-							    pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.15)
+									pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.15)
 								else:
 									print("case 4")
-                  new_x = float(((slope**2)*self.offset - x - z*slope)/(slope**2+1))
-                  new_z = float(slope*((-x-z*slope-self.offset*(1+2*(slope**2)))/(slope**2+1)))
+									new_x = float(((slope**2)*self.offset - x - z*slope)/(slope**2+1))
+									new_z = float(slope*((-x-z*slope-self.offset*(1+2*(slope**2)))/(slope**2+1)))
 									moving_distance = self.offset - x + (z * slope)
 									pose_msg.data[0] = float(math.radians(90.0))
-                  pose_msg.data[1]= float(math.sqrt((new_x+self.offset)**2+new_z**2))
+									pose_msg.data[1]= float(math.sqrt((new_x+self.offset)**2+new_z**2))
 									pose_msg.data[2] = float(-math.radians(90.0) - abs(ry))
-                  pose_msg.data[3]=float((z-new_z)*math.sqrt(1+slope**2)-0.15)
+									pose_msg.data[3]=float((z-new_z)*math.sqrt(1+slope**2)-0.15)
                   
 							
 					
