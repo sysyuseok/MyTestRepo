@@ -61,9 +61,12 @@ class AprilTagPublisherNode(Node):
 		self.pub_switch = True
 
 		self.offset = 0.031
+		self.parking_signal = 3
 		
-		self.delta_x = 0.03
-		self.delta_z = 0.11
+		self.translation_vectors=[]
+		self.rotation_vectors=[]
+		
+		self.get_logger().info("find_path_final.py released!")
 		
 		
 			
@@ -87,63 +90,78 @@ class AprilTagPublisherNode(Node):
 			# AprilTag 탐지
 			detections = self.detector.detect(frame)
 
-			if detections:
-				#self.tag_detected = True
-				detection = detections[0]
-				corners = detection.corners.astype(int)
-				top_left, top_right, bottom_right, bottom_left = corners
-				image_points = np.array(
-						[top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
-				# self.get_logger().info(f"coordinates\n{top_left}   {top_right} \n{bottom_left}   {bottom_right}\n")
-				
-				# SolvePnP를 사용하여 회전 벡터와 이동 벡터 추정
-				success, rotation_vector, translation_vector = cv2.solvePnP(
-						self.tag_3d_points, image_points, self.matrix_coefficients, self.distortion_coefficients)
-				slope = abs(math.tan(rotation_vector[1])) # 기울기
-				
-				if success:
-					# 메시지 발행
-					os.system('cls' if os.name == 'nt' else 'clear')
-					print(math.degrees(rotation_vector[1]))
-					pose_msg = Float32MultiArray()
-					pose_msg.data = [0.0] * 4
-					if rotation_vector[1] < 0:
-						if (translation_vector[0]+translation_vector[2]*slope) > self.offset:
-							print("case 1")
-							moving_distance = translation_vector[0] - self.offset + (translation_vector[2] * slope)#-self.delta_x
-							pose_msg.data[0] = float(math.radians(-90.0))
-							pose_msg.data[2] = float(math.radians(90.0) + abs(rotation_vector[1]))
-						else:
-							print("case 2")
-							moving_distance = self.offset - translation_vector[0] - (translation_vector[2] * slope)#-self.delta_x
-							pose_msg.data[0] = float(math.radians(90.0))
-							pose_msg.data[2] = float(math.radians(-90.0) + abs(rotation_vector[1]))
+			for detection in detections:
+				if detection.tag_id== self.parking_signal :
+					#self.tag_detected = True
+					#detection = detections[0]
+					corners = detection.corners.astype(int)
+					top_left, top_right, bottom_right, bottom_left = corners
+					image_points = np.array(
+							[top_left, top_right, bottom_right, bottom_left], dtype=np.float32)
+					# self.get_logger().info(f"coordinates\n{top_left}   {top_right} \n{bottom_left}   {bottom_right}\n")
+					
+					# SolvePnP를 사용하여 회전 벡터와 이동 벡터 추정
+					success, rotation_vector, translation_vector = cv2.solvePnP(
+							self.tag_3d_points, image_points, self.matrix_coefficients, self.distortion_coefficients)
+					slope = abs(math.tan(rotation_vector[1])) # 기울기
+					
+					if success:
+						self.translation_vectors.append(translation_vector)
+						self.rotation_vectors.append(rotation_vector)
 						
-					else:
-						if (translation_vector[0]-translation_vector[2]*slope) > self.offset :
-							print("case 3")
-							moving_distance = translation_vector[0] - self.offset - (translation_vector[2] * slope)#-self.delta_x
-							pose_msg.data[0] = float(math.radians(-90.0))
-							pose_msg.data[2] = float(math.radians(90.0) - abs(rotation_vector[1]))
-						else:
-							print("case 4")
-							moving_distance = self.offset - translation_vector[0] + (translation_vector[2] * slope)#-self.delta_x
-							pose_msg.data[0] = float(math.radians(90.0))
-							pose_msg.data[2] = float(-math.radians(90.0) - abs(rotation_vector[1]))
-					pose_msg.data[1] = float(moving_distance-0.055*math.sin(rotation_vector[1]))
-					pose_msg.data[3] = float((translation_vector[2]+0.055*(1-math.cos(abs(rotation_vector[1])))) * math.sqrt(1 +(slope ** 2)))
-				
-				
-				#pose_msg.data[3] = float(translation_vector[2] * math.sqrt(1 +(slope ** 2))+self.delta_z)
-				for i in range(4):
-					print(f"data {i} : {pose_msg.data[i]}")
-				
-				self.dir_publisher.publish(pose_msg)
-				
-				
-				print( f"\nPublished ID: {detection.tag_id}, \nPosition:")
-				print(f"{translation_vector[0]},\n {translation_vector[1]},\n {translation_vector[2]}")
-				print(f"Rotation:\n {rotation_vector[0]},\n {rotation_vector[1]},\n {rotation_vector[2]}")
+						if len(self.translation_vectors) >= 5:
+							# 메시지 발행
+							os.system('cls' if os.name == 'nt' else 'clear')
+							median_translation_vectors = np.median(self.translation_vectors, axis=0)
+							median_rotation_vectors = np.median(self.rotation_vectors,axis=0)
+							
+							x=median_translation_vectors[0]
+							z=median_translation_vectors[2]
+							ry=median_rotation_vectors[1]
+							
+							print(math.degrees(ry))
+							pose_msg = Float32MultiArray()
+							pose_msg.data = [0.0] * 4
+							if ry < 0:
+								if (x+z*slope) > self.offset:
+									print("case 1")
+									moving_distance = x- self.offset + (z * slope)
+									pose_msg.data[0] = float(math.radians(-90.0))
+									pose_msg.data[2] = float(math.radians(90.0) + abs(ry))
+								else:
+									print("case 2")
+									moving_distance = self.offset - x - (z * slope)
+									pose_msg.data[0] = float(math.radians(90.0))
+									pose_msg.data[2] = float(math.radians(-90.0) + abs(rotation_vector[1]))
+								
+							else:
+								if (x-z*slope) > self.offset :
+									print("case 3")
+									moving_distance = x - self.offset - (z * slope)
+									pose_msg.data[0] = float(math.radians(-90.0))
+									pose_msg.data[2] = float(math.radians(90.0) - abs(ry))
+								else:
+									print("case 4")
+									moving_distance = self.offset - x + (z * slope)
+									pose_msg.data[0] = float(math.radians(90.0))
+									pose_msg.data[2] = float(-math.radians(90.0) - abs(ry))
+							pose_msg.data[1] = float(moving_distance-0.055*math.sin(ry))
+							pose_msg.data[3] = float((z+0.055*(1-math.cos(abs(ry)))) * math.sqrt(1 +(slope ** 2))-0.05)
+					
+					
+					#pose_msg.data[3] = float(translation_vector[2] * math.sqrt(1 +(slope ** 2))+self.delta_z)
+					for i in range(4):
+						print(f"data {i} : {pose_msg.data[i]}")
+					
+					self.dir_publisher.publish(pose_msg)
+					
+					# Initialize the vectors
+					self.translation_vectors=[]
+					self.rotation_vectors=[]
+					
+					print( f"\nPublished ID: {detection.tag_id}, \nPosition:")
+					print(f"{translation_vector[0]},\n {translation_vector[1]},\n {translation_vector[2]}")
+					print(f"Rotation:\n {rotation_vector[0]},\n {rotation_vector[1]},\n {rotation_vector[2]}")
 		except Exception as e:
 			self.get_logger().error(f"Error in processing image: {e}")
 
